@@ -25,8 +25,9 @@ import {
 } from "./tareas.ts"
 
 const STATE_PATH = "task-sync.json"
-// Plan gratuito de Workers: 50 subpeticiones por ejecución. Lo que no quepa se hace en la siguiente pasada
-const BUDGET = 44
+// Plan gratuito de Workers: 50 subpeticiones por ejecución. Lo que no quepa se hace en la siguiente pasada;
+// el margen cubre los reintentos de api() ante un 429 de Discord
+const BUDGET = 40
 const IMPORT_COST = 5
 // Una issue recién creada por /tarea crear aún no tiene post: se le da margen para que no salgan dos
 const FRESH_MS = 2 * 60 * 1000
@@ -38,6 +39,8 @@ export interface Synced {
   title: string
   assignees: string[]
   milestone?: string
+  // Primer mensaje tal como quedó en Discord: si cambia TEAM o el formato, se vuelve a escribir
+  content?: string
 }
 
 export interface SyncState {
@@ -107,8 +110,11 @@ export function reconcile(item: ProjectItem, post: Post | undefined, prev: Synce
   }
 
   if (post.name !== threadName(item)) plan.discord.name = threadName(item)
-  const sameTeam = known && prev.assignees.join() === item.assignees.join() && prev.milestone === item.milestone
-  if (post.ownedByBot && !sameTeam) plan.discord.content = taskContent(item)
+  if (post.ownedByBot) {
+    const content = taskContent(item)
+    plan.next.content = content
+    if (!known || prev.content !== content) plan.discord.content = content
+  }
   return plan
 }
 
@@ -262,9 +268,8 @@ export async function syncTasks(env: Env, now = new Date()): Promise<SyncResult>
     used += c
     try {
       const { thread, contentOk } = await apply(env, meta, forum.tags, item, post, plan)
-      // Si no se pudo editar el mensaje, se guardan los asignados de antes para reintentarlo
-      const team = contentOk ? {} : { assignees: prev?.assignees ?? [], milestone: prev?.milestone }
-      state.items[item.number] = { ...plan.next, ...team, thread }
+      // Si no se pudo editar el mensaje, se guarda el de antes para reintentarlo
+      state.items[item.number] = { ...plan.next, ...(contentOk ? {} : { content: prev?.content }), thread }
       if (plan.create) result.created++
       else result.updated++
     } catch (err) {

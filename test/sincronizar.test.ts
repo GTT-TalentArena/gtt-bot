@@ -4,7 +4,7 @@ import { CHANNELS, GUILD_ID } from "../src/config.ts"
 import type { Env } from "../src/discord.ts"
 import { parseProject, type ProjectItem } from "../src/proyecto.ts"
 import { cost, type Post, reconcile, retag, snowflakeTime, type Synced, syncTasks } from "../src/sincronizar.ts"
-import { issueNumber, threadName } from "../src/tareas.ts"
+import { issueNumber, taskContent, threadName } from "../src/tareas.ts"
 
 const TAGS = [
   { id: "t-todo", name: "To do" },
@@ -45,6 +45,7 @@ const synced = (over: Partial<Synced> = {}): Synced => ({
   title: "P0 - Pipeline",
   assignees: ["hxst1"],
   milestone: "M0",
+  content: taskContent(item()),
   ...over,
 })
 
@@ -96,11 +97,18 @@ test("un post sin historial se alinea con GitHub sin subir nada", () => {
 })
 
 test("título y asignados van de GitHub a Discord; el mensaje solo se edita si es del bot", () => {
-  const plan = reconcile(item({ title: "P0 - Pipeline v2", assignees: ["jimy-k4"] }), post(), synced())
+  const plan = reconcile(item({ title: "P0 - Pipeline v2", assignees: ["jimy-k4", "alguien-de-fuera"] }), post(), synced())
   assert.equal(plan.discord.name, "#12 · P0 - Pipeline v2")
-  assert.match(plan.discord.content ?? "", /`jimy-k4`/)
+  // Con ID en TEAM sale como mención; sin él, como login
+  assert.match(plan.discord.content ?? "", /\*\*Responsable:\*\* <@350599420909322250>, `alguien-de-fuera`/)
   assert.equal(reconcile(item({ assignees: ["jimy-k4"] }), post({ ownedByBot: false }), synced()).discord.content, undefined)
 })
+
+test("si cambia el texto que tocaría (p. ej. al rellenar TEAM), el mensaje se reescribe aunque no cambien los asignados", () => {
+  const plan = reconcile(item(), post(), synced({ content: "**Responsable:** `hxst1`" }))
+  assert.equal(plan.discord.content, taskContent(item()))
+  assert.equal(plan.next.content, taskContent(item()))
+}) 
 
 test("retag cambia estado y área y conserva el resto de etiquetas", () => {
   assert.deepEqual(retag(["t-todo", "t-datos", "otra"], TAGS, { status: "Review" }), ["t-datos", "otra", "t-review"])
@@ -229,7 +237,7 @@ test("pasada completa: crea el post de la issue e importa un post nuevo del foro
 
 test("tras importar un post, sus etiquetas suben al Project en la pasada siguiente", () => {
   const imported = item({ number: 30, status: undefined, area: undefined, assignees: [], milestone: undefined, title: "Medir ruido" })
-  const plan = reconcile(imported, post({ name: "#30 · Medir ruido", status: "To do", area: "Datos" }), synced({ status: undefined, area: undefined, title: "Medir ruido", assignees: [], milestone: undefined }))
+  const plan = reconcile(imported, post({ name: "#30 · Medir ruido", status: "To do", area: "Datos", ownedByBot: false }), synced({ status: undefined, area: undefined, title: "Medir ruido", assignees: [], milestone: undefined }))
   assert.deepEqual(plan.github, { status: "To do", area: "Datos" })
   assert.deepEqual(plan.discord, {})
 })
@@ -267,6 +275,6 @@ test("si no se puede editar el mensaje del post, se reintenta en la siguiente pa
   const stored = JSON.stringify({ version: 1, since: "2026-10-21T00:00:00.000Z", items: { "12": synced({ thread: id, status: "En curso", area: undefined, assignees: ["jimy-k4"], milestone: undefined }) } })
   const world = fakeWorld([{ id, name: "#12 · P0 - Pipeline", parent_id: CHANNELS.tareas, applied_tags: ["t-curso"], owner_id: "999" }], { stored, failPatch: /\/messages\// })
   await withFetch(world.fetchMock, () => syncTasks(env, new Date("2026-12-31T00:00:00Z")))
-  // Los asignados guardados siguen siendo los antiguos: la próxima pasada vuelve a intentarlo
-  assert.deepEqual(world.state().items["12"].assignees, ["jimy-k4"])
+  // Se guarda el mensaje antiguo: la próxima pasada vuelve a intentarlo
+  assert.equal(world.state().items["12"].content, JSON.parse(stored).items["12"].content)
 })

@@ -37,11 +37,11 @@ export const AREA_FIELD = "Área"
 // Equipo: GitHub ↔ Discord, para convertir asignados en menciones y al revés.
 // Los IDs de Discord no son secretos (clic derecho en el usuario → Copiar ID). Vacío = sin mención.
 export const TEAM: readonly { github: string; discord: string }[] = [
-  { github: "AlejandroMolines", discord: "" },
-  { github: "jimy-k4", discord: "" },
-  { github: "hxst1", discord: "" },
-  { github: "n1co2611", discord: "" },
-  { github: "PabloCordoba3", discord: "" },
+  { github: "AlejandroMolines", discord: "283326847662686209" },
+  { github: "jimy-k4", discord: "350599420909322250" },
+  { github: "hxst1", discord: "398174691027714059" },
+  { github: "n1co2611", discord: "562647167890620418" },
+  { github: "PabloCordoba3", discord: "453578252330598400" },
 ]
 
 export const STATUS_EMOJI: Record<string, string> = {

@@ -80,12 +80,25 @@ export async function verifySignature(
   }
 }
 
+// Espera máxima ante un 429 antes de reintentar una vez; si Discord pide más, se deja para la siguiente pasada
+const MAX_RETRY_WAIT_S = 5
+
 export async function api<T>(env: Env, method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(API + path, {
-    method,
-    headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  const send = () =>
+    fetch(API + path, {
+      method,
+      headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  let res = await send()
+  if (res.status === 429) {
+    // Crear muchos posts seguidos (p. ej. la primera sincronización) choca con el límite por canal
+    const { retry_after } = (await res.clone().json().catch(() => ({}))) as { retry_after?: number }
+    if (retry_after !== undefined && retry_after <= MAX_RETRY_WAIT_S) {
+      await new Promise((done) => setTimeout(done, retry_after * 1000))
+      res = await send()
+    }
+  }
   if (!res.ok) throw new Error(`Discord ${method} ${path} → ${res.status} ${await res.text()}`)
   return (res.status === 204 ? undefined : await res.json()) as T
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { clip, editOriginal, editOriginalWithFiles, type Env, readOptions, verifySignature } from "../src/discord.ts"
+import { api, clip, editOriginal, editOriginalWithFiles, type Env, readOptions, verifySignature } from "../src/discord.ts"
 import { canDownloadArchive } from "../src/archivo.ts"
 import { ARCHIVE_ROLE_ID, GUILD_ID } from "../src/config.ts"
 import bot from "../src/index.ts"
@@ -222,4 +222,29 @@ test("solo URLs http(s) válidas como enlace del experimento", () => {
   const embed = experimentEmbed({ titulo: "x", hipotesis: "y", resultado: "open", enlace: "github.com/x" }, "1")
   assert.equal(embed.url, undefined)
   assert.ok(embed.fields?.some((f) => f.name === "Enlace"))
+})
+
+test("ante un 429 corto de Discord se espera y se reintenta una vez", async () => {
+  const env = { DISCORD_PUBLIC_KEY: "", DISCORD_APPLICATION_ID: "app", DISCORD_BOT_TOKEN: "t" }
+  const original = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = (async () => {
+    calls++
+    if (calls === 1) return new Response(JSON.stringify({ message: "rate limited", retry_after: 0.01 }), { status: 429 })
+    return new Response(JSON.stringify({ id: "1" }), { status: 200 })
+  }) as typeof fetch
+  try {
+    assert.deepEqual(await api(env, "POST", "/channels/1/threads", {}), { id: "1" })
+    assert.equal(calls, 2)
+    // Si Discord pide esperar demasiado, no se bloquea el Worker: error y siguiente pasada
+    calls = 0
+    globalThis.fetch = (async () => {
+      calls++
+      return new Response(JSON.stringify({ retry_after: 60 }), { status: 429 })
+    }) as typeof fetch
+    await assert.rejects(api(env, "POST", "/channels/1/threads", {}), /429/)
+    assert.equal(calls, 1)
+  } finally {
+    globalThis.fetch = original
+  }
 })
