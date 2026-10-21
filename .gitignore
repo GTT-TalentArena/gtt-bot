@@ -3,3 +3,4 @@ node_modules/
 # Credenciales locales: nunca a git
 .dev.vars
 .env
+dist/

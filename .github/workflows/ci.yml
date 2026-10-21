@@ -1,0 +1,29 @@
+# Comprueba tipos, tests y que el Worker compila en cada PR y push a main. No necesita secrets.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # Empaqueta el Worker sin publicarlo: detecta imports rotos antes del deploy
+      - run: npx wrangler deploy --dry-run --outdir dist
