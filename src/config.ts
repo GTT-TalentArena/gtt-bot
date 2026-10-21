@@ -21,6 +21,29 @@ export const DEADLINE = "2026-11-17T23:59:59+01:00"
 // Etiquetas del foro de tareas: cada post lleva una de estado y una de área
 export const STATUS_TAGS = ["To do", "En curso", "Review", "Bloqueado", "Hecho"] as const
 export const AREA_TAGS = ["Datos", "Algoritmos", "Infra", "Pitch"] as const
+// Las tareas viven en el GitHub Project (manda) y el foro es su espejo: ver src/sincronizar.ts
+export const PROJECT = { number: 3, repo: "more-than-a-hack-2027" } as const
+// Status del Project → etiqueta de estado del foro
+export const PROJECT_STATUS: Record<string, (typeof STATUS_TAGS)[number]> = {
+  Todo: "To do",
+  "In Progress": "En curso",
+  Review: "Review",
+  Blocked: "Bloqueado",
+  Done: "Hecho",
+}
+// Campo del Project con las mismas opciones que AREA_TAGS (el bot lo crea si falta)
+export const AREA_FIELD = "Área"
+
+// Equipo: GitHub ↔ Discord, para convertir asignados en menciones y al revés.
+// Los IDs de Discord no son secretos (clic derecho en el usuario → Copiar ID). Vacío = sin mención.
+export const TEAM: readonly { github: string; discord: string }[] = [
+  { github: "AlejandroMolines", discord: "" },
+  { github: "jimy-k4", discord: "" },
+  { github: "hxst1", discord: "" },
+  { github: "n1co2611", discord: "" },
+  { github: "PabloCordoba3", discord: "" },
+]
+
 export const STATUS_EMOJI: Record<string, string> = {
   "To do": "📥",
   "En curso": "🚧",

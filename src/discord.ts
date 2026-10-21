@@ -6,7 +6,7 @@ export interface Env {
   DISCORD_PUBLIC_KEY: string
   DISCORD_APPLICATION_ID: string
   DISCORD_BOT_TOKEN: string
-  GITHUB_TOKEN?: string // opcional: sube el límite de la API de GitHub
+  GITHUB_TOKEN?: string // PAT de la org: tareas ↔ GitHub Project (sin él, solo lectura anónima y sin sincronizar)
   // Secrets exclusivos del Worker: nunca se añaden a wrangler.toml ni a git.
   SUPABASE_URL?: string
   SUPABASE_SECRET_KEY?: string

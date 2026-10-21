@@ -6,8 +6,8 @@ Bot de Discord del equipo GTT, enfocado a la productividad y a tener la informac
 
 | comando | qué hace |
 |---|---|
-| `/tarea crear titulo responsable area [detalle]` | crea un post en 📋 tareas con las etiquetas 📥 To do + área y avisa al responsable |
-| `/tarea estado estado` | dentro del post: cambia la etiqueta de estado (To do → En curso → Review → Hecho, o Bloqueado) y conserva el área |
+| `/tarea crear titulo responsable area [detalle]` | crea la issue en el fork, la añade al Project (Todo + área) y abre su post en 📋 tareas avisando al responsable |
+| `/tarea estado estado` | dentro del post: cambia la etiqueta de estado (To do → En curso → Review → Hecho, o Bloqueado), conserva el área y mueve la tarjeta en el Project |
 | `/tarea lista [estado] [responsable]` | tareas abiertas (o las de un estado/persona), con su responsable |
 | `/experimento titulo hipotesis resultado [spellf1 split macrof1 enlace notas]` | publica el experimento en 🔬 experimentos; compara spellF1 **solo** con el baseline del mismo split (0,2433 partido · 0,3256 público) y avisa si se ha medido en la ventana pública |
 | `/resumen` | cuenta atrás, tareas por estado, bloqueadas, en marcha, sin responsable, PRs abiertas, último deploy y última entrada del log |
@@ -76,6 +76,8 @@ npx wrangler tail   # logs en directo del Worker
 | `src/commands.ts` | definición de los comandos (la que se registra) |
 | `src/config.ts` | IDs del servidor y canales, deadline, etiquetas, baselines |
 | `src/tareas.ts` | foro de tareas |
+| `src/proyecto.ts` | GitHub Project (GraphQL): leer tareas, cambiar Status/Área, crear issues |
+| `src/sincronizar.ts` | sincronización foro ↔ Project (cron cada 5 min) |
 | `src/experimento.ts` | registro de experimentos |
 | `src/info.ts` | cuenta atrás, chuleta del reto, GitHub y log |
 | `src/resumen.ts` | resumen (comando + diario) |
@@ -84,6 +86,37 @@ npx wrangler tail   # logs en directo del Worker
 | `src/supabase.ts` | cliente REST mínimo para el bucket privado de Supabase |
 | `scripts/sync-discord-archive.ts` | entrada de la sincronización ejecutada por GitHub Actions |
 | `.github/workflows/sync-discord-archive.yml` | programación cada 6 h y ejecución manual |
+
+## Tareas sincronizadas con el GitHub Project
+
+El [Project 3](https://github.com/orgs/GTT-TalentArena/projects/3) y el foro 📋 tareas se sincronizan en los dos sentidos cada 5 minutos (cron del Worker). **GitHub manda**: si los dos lados cambian a la vez, gana GitHub.
+
+| en GitHub | en Discord |
+|---|---|
+| issue del fork en el Project | post `#N · título` |
+| Status: Todo · In Progress · Review · Blocked · Done | etiqueta: To do · En curso · Review · Bloqueado · Hecho (si el cambio viene de GitHub, el post se archiva) |
+| campo **Área** (lo crea el bot) | etiqueta: Datos · Algoritmos · Infra · Pitch |
+| asignados y milestone | primer mensaje del post (menciones según `TEAM` en `src/config.ts`) |
+
+- Estado y área van en los dos sentidos: cambiar la etiqueta a mano en el foro también mueve la tarjeta en la siguiente pasada.
+- Título, asignados y milestone solo bajan de GitHub a Discord: se editan en la issue.
+- Un post creado a mano en el foro (sin `#N`) se convierte en issue: título del post, texto del primer mensaje, asignada a la primera mención (o a quien lo creó) y con su estado y área. El post se renombra a `#N · título` y el bot deja el enlace. Los posts anteriores a la primera sincronización se ignoran.
+- Un post titulado a mano `#N · …` se toma como el de la issue N: no uses ese formato para posts nuevos.
+- El bot necesita **Manage Threads** en el foro para renombrar, etiquetar y desarchivar posts creados por otros.
+- El último estado sincronizado se guarda en el bucket privado (`task-sync.json`): así se sabe qué lado ha cambiado. Si se borra, la siguiente pasada alinea Discord con GitHub sin perder nada.
+- El plan gratuito de Workers limita las peticiones por ejecución: si hay muchos cambios de golpe, se reparten en varias pasadas.
+
+**Token** (`GITHUB_TOKEN`): PAT *fine-grained* en https://github.com/settings/personal-access-tokens/new con *Resource owner* **GTT-TalentArena** (si la org exige aprobación, la da un owner):
+- *Repository access*: `more-than-a-hack-2027` y `gtt-talentarena.github.io`.
+- *Repository permissions*: **Issues: Read and write**; Pull requests, Contents y Actions: Read-only (los usan `/resumen` y `/log`).
+- *Organization permissions*: **Projects: Read and write**.
+
+```bash
+cd bot
+npx wrangler secret put GITHUB_TOKEN
+```
+
+Rellena los IDs de Discord de `TEAM` en `src/config.ts` (no son secretos) para que asignados y responsables se conviertan en menciones.
 
 ## Almacenamiento privado del archivo
 

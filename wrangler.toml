@@ -2,13 +2,14 @@ name = "gtt-bot"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
-# Solo el resumen diario. La sincronización privada vive en GitHub Actions.
+# Resumen diario (07:00 UTC) y sincronización de tareas con el GitHub Project (cada 5 min,
+# TASK_SYNC_CRON en src/index.ts). El archivo de Discord se sincroniza en GitHub Actions.
 [triggers]
-crons = ["0 7 * * *"]
+crons = ["0 7 * * *", "*/5 * * * *"]
 
 [observability]
 enabled = true
 
 # Secrets (no van aquí): npx wrangler secret put DISCORD_PUBLIC_KEY / DISCORD_APPLICATION_ID / DISCORD_BOT_TOKEN
 # Archivo privado leído por /archivo: SUPABASE_URL / SUPABASE_SECRET_KEY.
-# Opcional: GITHUB_TOKEN (token de solo lectura) si la API de GitHub da 403 por límite
+# GITHUB_TOKEN: PAT fine-grained de la org (Issues y Projects de escritura) para sincronizar tareas; ver README

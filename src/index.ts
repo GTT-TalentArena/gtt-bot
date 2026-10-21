@@ -7,6 +7,7 @@ import { api, EPHEMERAL, editOriginal, editOriginalWithFiles, type Env, type Int
 import { type Experiment, postExperiment } from "./experimento.ts"
 import { countdown, GitHubLimitError, logEntries, logLine, reto } from "./info.ts"
 import { summary } from "./resumen.ts"
+import { syncTasks } from "./sincronizar.ts"
 import { createTask, listMessage, setStatus } from "./tareas.ts"
 
 const json = (data: unknown) => new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } })
@@ -38,6 +39,9 @@ function deferredArchive(env: Env, ctx: ExecutionContext, i: Interaction): Respo
   // El flag se fija al diferir: el PATCH posterior conserva la respuesta privada.
   return json({ type: ResponseType.DEFERRED, data: { flags: EPHEMERAL } })
 }
+
+// Debe coincidir con el segundo cron de wrangler.toml
+export const TASK_SYNC_CRON = "*/5 * * * *"
 
 function handle(env: Env, ctx: ExecutionContext, i: Interaction): Response {
   const user = i.member?.user.id ?? "0"
@@ -128,9 +132,14 @@ export default {
     return new Response("tipo de interacción no soportado", { status: 400 })
   },
 
-  // Solo el resumen diario se programa en el Worker. El archivo se sincroniza
-  // desde GitHub Actions para no depender del límite de ejecución de Workers.
-  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  // Crons de wrangler.toml: resumen diario y sincronización de tareas con el GitHub Project.
+  // El archivo de Discord se sincroniza desde GitHub Actions (no cabe en los límites de un Worker).
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === TASK_SYNC_CRON) {
+      if (!env.GITHUB_TOKEN) return console.warn("[tareas] sin GITHUB_TOKEN: no se sincroniza con GitHub")
+      ctx.waitUntil(syncTasks(env).then((r) => console.log(`[tareas] +${r.created} posts · +${r.imported} issues · ${r.updated} actualizadas · ${r.pending} pendientes`)))
+      return
+    }
     ctx.waitUntil(summary(env).then((message) => api(env, "POST", `/channels/${CHANNELS.general}/messages`, message)))
   },
 }
