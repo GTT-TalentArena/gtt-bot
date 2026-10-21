@@ -1,6 +1,9 @@
 // Datos fijos del servidor y del reto. Los IDs no son secretos: solo los tokens van en secrets.
 
 export const GUILD_ID = "1562076469172117586"
+// Solo este rol puede descargar el historial entero desde /archivo discord.
+// No es una credencial; el Worker también comprueba que la interacción sea del guild.
+export const ARCHIVE_ROLE_ID = "1562078825272057856" // ⚽ GTT Team
 
 export const CHANNELS = {
   general: "1562076469679886440",

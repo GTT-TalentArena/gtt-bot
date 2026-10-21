@@ -2,7 +2,7 @@ name = "gtt-bot"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
-# Resumen diario en #general. Cron en UTC: 07:00 UTC = 08:00 en Barcelona (horario de invierno)
+# Solo el resumen diario. La sincronización privada vive en GitHub Actions.
 [triggers]
 crons = ["0 7 * * *"]
 
@@ -10,4 +10,5 @@ crons = ["0 7 * * *"]
 enabled = true
 
 # Secrets (no van aquí): npx wrangler secret put DISCORD_PUBLIC_KEY / DISCORD_APPLICATION_ID / DISCORD_BOT_TOKEN
+# Archivo privado leído por /archivo: SUPABASE_URL / SUPABASE_SECRET_KEY.
 # Opcional: GITHUB_TOKEN (token de solo lectura) si la API de GitHub da 403 por límite

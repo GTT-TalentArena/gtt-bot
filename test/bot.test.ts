@@ -1,6 +1,9 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { clip, editOriginal, type Env, readOptions, verifySignature } from "../src/discord.ts"
+import { clip, editOriginal, editOriginalWithFiles, type Env, readOptions, verifySignature } from "../src/discord.ts"
+import { canDownloadArchive } from "../src/archivo.ts"
+import { ARCHIVE_ROLE_ID, GUILD_ID } from "../src/config.ts"
+import bot from "../src/index.ts"
 import { experimentEmbed, safeUrl, vsBaseline } from "../src/experimento.ts"
 import { ago, countdown, logLine, parseFrontMatter } from "../src/info.ts"
 import { summary } from "../src/resumen.ts"
@@ -23,6 +26,14 @@ test("aplana subcomandos y opciones", () => {
   const { sub, values } = readOptions([{ name: "crear", type: 1, options: [{ name: "titulo", type: 3, value: "EDA" }] }])
   assert.equal(sub, "crear")
   assert.deepEqual(values, { titulo: "EDA" })
+})
+
+test("/archivo discord exige el rol GTT Team y el servidor configurado", () => {
+  const interaction = { type: 2, token: "t", guild_id: GUILD_ID, member: { user: { id: "u", username: "ana" }, roles: [ARCHIVE_ROLE_ID] } }
+  assert.equal(canDownloadArchive(interaction), true)
+  assert.equal(canDownloadArchive({ ...interaction, member: { ...interaction.member, roles: [] } }), false)
+  assert.equal(canDownloadArchive({ ...interaction, guild_id: "100000000000000001" }), false)
+  assert.equal(canDownloadArchive({ ...interaction, member: undefined }), false)
 })
 
 test("cuenta atrás hasta el 17-nov", () => {
@@ -147,6 +158,48 @@ test("si Discord rechaza la edición, se reintenta con texto simple", async () =
   assert.equal(calls.length, 2)
   assert.match(String(calls[1].init?.body), /No he podido mostrar/)
   assert.equal(errors.length, 1)
+})
+
+test("el archivo efímero se edita con multipart payload_json y files[n]", async () => {
+  const calls = mockFetch(() => new Response(null, { status: 200 }))
+  await editOriginalWithFiles(env, "tok", { content: "privado", allowed_mentions: { parse: [] } }, [
+    { name: "archivo-discord.md", description: "historial", content: "# privado", contentType: "text/markdown" },
+    { name: "manifest.json", content: "{}", contentType: "application/json" },
+  ])
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].init?.method, "PATCH")
+  const form = calls[0].init?.body
+  assert.ok(form instanceof FormData)
+  const payload = JSON.parse(String(form.get("payload_json"))) as { content: string; attachments: { id: number; filename: string; description?: string }[] }
+  assert.equal(payload.content, "privado")
+  assert.deepEqual(payload.attachments, [{ id: 0, filename: "archivo-discord.md", description: "historial" }, { id: 1, filename: "manifest.json" }])
+  assert.equal(await (form.get("files[0]") as Blob).text(), "# privado")
+})
+
+test("/archivo discord difiere de forma efímera y adjunta la copia privada sin volver a leer Discord", async () => {
+  const calls = mockFetch((url) => {
+    if (url.includes("/storage/v1/object/authenticated/discord-archives/latest-archive.json")) return ok({
+      version: 2, generatedAt: "2026-10-21T12:15:00.000Z", guildId: GUILD_ID, omissions: [],
+      archive: [{ channel: { id: "1562076469679886440", type: 0, name: "general" }, messages: [] }],
+    })
+    if (url.includes("/webhooks/app/tok/messages/@original")) return new Response(null, { status: 200 })
+    return new Response(`unexpected ${url}`, { status: 500 })
+  })
+  const keys = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]) as CryptoKeyPair
+  const publicKey = hex(await crypto.subtle.exportKey("raw", keys.publicKey) as ArrayBuffer)
+  const body = JSON.stringify({ type: 2, token: "tok", guild_id: GUILD_ID, attachment_size_limit: 1024 * 1024, member: { user: { id: "u", username: "ana" }, roles: [ARCHIVE_ROLE_ID] }, data: { name: "archivo", options: [{ type: 1, name: "discord" }] } })
+  const timestamp = "1729500000"
+  const signature = hex(await crypto.subtle.sign("Ed25519", keys.privateKey, new TextEncoder().encode(timestamp + body)))
+  let pending: Promise<unknown> | undefined
+  const ctx = { waitUntil(promise: Promise<unknown>) { pending = promise }, passThroughOnException() {} } as ExecutionContext
+  const response = await bot.fetch(new Request("https://worker.example", { method: "POST", headers: { "X-Signature-Ed25519": signature, "X-Signature-Timestamp": timestamp }, body }), { ...env, DISCORD_PUBLIC_KEY: publicKey, SUPABASE_URL: "https://project.supabase.co", SUPABASE_SECRET_KEY: "sb_secret_test" }, ctx)
+  assert.deepEqual(await response.json(), { type: 5, data: { flags: 64 } })
+  await pending
+  const form = calls.find((call) => call.url.includes("/webhooks/app/tok/messages/@original"))?.init?.body
+  assert.ok(form instanceof FormData)
+  assert.equal(JSON.parse(String(form.get("payload_json"))).attachments.length, 2)
+  assert.match(await (form.get("files[0]") as Blob).text(), /Archivo de Discord/)
+  assert.ok(calls.every((call) => !call.url.includes("discord.com/api/v10/guilds/")))
 })
 
 test("una tarea solo hace ping al responsable, aunque el detalle diga @everyone", async () => {

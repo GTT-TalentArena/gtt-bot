@@ -6,6 +6,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "register": "node --env-file=.dev.vars scripts/register.ts",
+    "export:discord": "node --env-file=.dev.vars scripts/export-discord.ts",
+    "sync:discord-archive": "node scripts/sync-discord-archive.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts"
   },

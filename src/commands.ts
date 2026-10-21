@@ -62,6 +62,11 @@ export const COMMANDS = [
       { type: STRING, name: "notas", description: "Qué hemos aprendido / siguiente paso", max_length: 1000 },
     ],
   },
+  {
+    name: "archivo",
+    description: "Descarga el archivo privado del servidor (rol GTT Team)",
+    options: [{ type: SUB, name: "discord", description: "Genera el archivo completo de Discord" }],
+  },
   { name: "resumen", description: "Estado del equipo: tareas, PRs, último deploy y log" },
   { name: "countdown", description: "Cuánto queda para la entrega de la Phase 1" },
   {

@@ -7,6 +7,9 @@ export interface Env {
   DISCORD_APPLICATION_ID: string
   DISCORD_BOT_TOKEN: string
   GITHUB_TOKEN?: string // opcional: sube el límite de la API de GitHub
+  // Secrets exclusivos del Worker: nunca se añaden a wrangler.toml ni a git.
+  SUPABASE_URL?: string
+  SUPABASE_SECRET_KEY?: string
 }
 
 export const InteractionType = { PING: 1, COMMAND: 2 } as const
@@ -23,9 +26,11 @@ export interface Option {
 export interface Interaction {
   type: number
   token: string
+  guild_id?: string
+  attachment_size_limit?: number
   channel_id?: string
   channel?: { id: string; parent_id?: string; type: number }
-  member?: { user: { id: string; username: string } }
+  member?: { user: { id: string; username: string }; roles?: string[] }
   data?: { name: string; options?: Option[] }
 }
 
@@ -44,6 +49,13 @@ export interface Message {
   embeds?: Embed[]
   flags?: number
   allowed_mentions?: { parse?: string[]; users?: string[] }
+}
+
+export interface FileAttachment {
+  name: string
+  description?: string
+  content: string | Uint8Array
+  contentType?: string
 }
 
 function hexToBytes(hex: string): Uint8Array {
@@ -91,6 +103,23 @@ export async function editOriginal(env: Env, token: string, message: Message): P
   if (res.ok) return
   console.error(`editOriginal → ${res.status} ${await res.text()}`)
   await patch({ content: "⚠️ No he podido mostrar la respuesta. Revisa los logs (`npx wrangler tail`).", allowed_mentions: { parse: [] } })
+}
+
+/**
+ * PATCH de la respuesta original mediante multipart/form-data. Discord documenta
+ * los campos payload_json y files[n] para los mensajes webhook/Interaction.
+ */
+export async function editOriginalWithFiles(env: Env, token: string, message: Message, files: FileAttachment[]): Promise<void> {
+  const form = new FormData()
+  form.append("payload_json", JSON.stringify({
+    ...message,
+    attachments: files.map((file, id) => ({ id, filename: file.name, ...(file.description ? { description: file.description } : {}) })),
+  }))
+  for (const [id, file] of files.entries()) form.append(`files[${id}]`, new Blob([file.content], { type: file.contentType }), file.name)
+  const response = await fetch(`${API}/webhooks/${env.DISCORD_APPLICATION_ID}/${token}/messages/@original`, { method: "PATCH", body: form })
+  if (response.ok) return
+  console.error(`editOriginalWithFiles → ${response.status} ${await response.text()}`)
+  await editOriginal(env, token, { content: "⚠️ No he podido adjuntar el archivo. Revisa los logs (`npx wrangler tail`).", allowed_mentions: { parse: [] } })
 }
 
 // Límites de Discord: 1024 caracteres por valor de campo, 4096 por descripción

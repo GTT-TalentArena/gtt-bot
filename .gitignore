@@ -4,3 +4,5 @@ node_modules/
 .dev.vars
 .env
 dist/
+# Archivo privado de conversaciones: jamás subir a git (incluye salidas fechadas).
+context/

@@ -1,0 +1,7 @@
+# Copia este archivo como .dev.vars para desarrollo local. No subas .dev.vars.
+DISCORD_APPLICATION_ID=
+DISCORD_PUBLIC_KEY=
+DISCORD_BOT_TOKEN=
+# Solo si pruebas la sincronización privada localmente. En producción van como secrets de Wrangler.
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_SECRET_KEY=sb_secret_REPLACE_ME

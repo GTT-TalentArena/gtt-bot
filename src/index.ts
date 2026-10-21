@@ -2,7 +2,8 @@
 // y un cron publica el resumen diario. No hay proceso encendido que mantener.
 
 import { CHANNELS } from "./config.ts"
-import { api, EPHEMERAL, editOriginal, type Env, type Interaction, InteractionType, type Message, readOptions, ResponseType, verifySignature } from "./discord.ts"
+import { buildDiscordArchive, canDownloadArchive } from "./archivo.ts"
+import { api, EPHEMERAL, editOriginal, editOriginalWithFiles, type Env, type Interaction, InteractionType, type Message, readOptions, ResponseType, verifySignature } from "./discord.ts"
 import { type Experiment, postExperiment } from "./experimento.ts"
 import { countdown, GitHubLimitError, logEntries, logLine, reto } from "./info.ts"
 import { summary } from "./resumen.ts"
@@ -23,6 +24,19 @@ function deferred(env: Env, ctx: ExecutionContext, i: Interaction, work: () => P
       .then((message) => editOriginal(env, i.token, message)),
   )
   return json({ type: ResponseType.DEFERRED, data: ephemeral ? { flags: EPHEMERAL } : {} })
+}
+
+function deferredArchive(env: Env, ctx: ExecutionContext, i: Interaction): Response {
+  ctx.waitUntil(
+    buildDiscordArchive(env, i.attachment_size_limit)
+      .then((response) => editOriginalWithFiles(env, i.token, { content: response.content, allowed_mentions: { parse: [] } }, response.files))
+      .catch(async (err: unknown) => {
+        console.error(err)
+        await editOriginal(env, i.token, { content: "⚠️ No he podido generar el archivo. Inténtalo de nuevo; si sigue, revisa `npx wrangler tail`.", allowed_mentions: { parse: [] } })
+      }),
+  )
+  // El flag se fija al diferir: el PATCH posterior conserva la respuesta privada.
+  return json({ type: ResponseType.DEFERRED, data: { flags: EPHEMERAL } })
 }
 
 function handle(env: Env, ctx: ExecutionContext, i: Interaction): Response {
@@ -76,6 +90,11 @@ function handle(env: Env, ctx: ExecutionContext, i: Interaction): Response {
         true,
       )
 
+    case "archivo":
+      if (sub !== "discord") return reply({ content: "Subcomando desconocido 🤔", flags: EPHEMERAL })
+      if (!canDownloadArchive(i)) return reply({ content: "🔒 `/archivo discord` solo está disponible para el rol ⚽ GTT Team dentro del servidor GTT.", flags: EPHEMERAL })
+      return deferredArchive(env, ctx, i)
+
     case "tarea":
       if (sub === "crear") {
         return deferred(env, ctx, i, () =>
@@ -109,7 +128,8 @@ export default {
     return new Response("tipo de interacción no soportado", { status: 400 })
   },
 
-  // Resumen diario en #general (horario en wrangler.toml)
+  // Solo el resumen diario se programa en el Worker. El archivo se sincroniza
+  // desde GitHub Actions para no depender del límite de ejecución de Workers.
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(summary(env).then((message) => api(env, "POST", `/channels/${CHANNELS.general}/messages`, message)))
   },

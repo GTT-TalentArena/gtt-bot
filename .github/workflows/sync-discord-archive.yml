@@ -1,0 +1,34 @@
+name: Sync Discord archive
+
+on:
+  schedule:
+    # UTC: 00:15, 06:15, 12:15 y 18:15. GitHub puede retrasar cron en horas pico.
+    - cron: "15 */6 * * *"
+  workflow_dispatch:
+
+# La Action solo lee el repositorio y llama a Discord/Supabase con secretos.
+permissions:
+  contents: read
+
+concurrency:
+  group: discord-archive-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run sync:discord-archive
