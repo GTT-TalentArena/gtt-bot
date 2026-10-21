@@ -34,11 +34,24 @@ async function failure(response: Response, operation: string, path: string): Pro
   return new Error(`Supabase Storage ${operation} ${path} → ${response.status}${detail ? `: ${detail}` : ""}`)
 }
 
-/** Lee un objeto de un bucket no público; 404 es útil para la primera sincronización. */
+// Storage responde a un objeto inexistente con HTTP 400 y el 404 en el cuerpo
+// ({"statusCode":"404","code":"NoSuchKey"}), no con un 404 HTTP.
+async function isMissingObject(response: Response): Promise<boolean> {
+  if (response.status === 404) return true
+  if (response.status !== 400) return false
+  try {
+    const body = await response.clone().json() as { statusCode?: string; code?: string }
+    return body.statusCode === "404" || body.code === "NoSuchKey"
+  } catch {
+    return false
+  }
+}
+
+/** Lee un objeto de un bucket no público; «no existe» es útil para la primera sincronización. */
 export async function getPrivateObject(env: Env, path: string, cacheBust = String(Date.now())): Promise<Response | undefined> {
   const { base, key } = settings(env)
   const response = await fetch(objectUrl(base, path, true, cacheBust), { headers: headers(key) })
-  if (response.status === 404) return undefined
+  if (await isMissingObject(response)) return undefined
   if (!response.ok) throw await failure(response, "GET", path)
   return response
 }

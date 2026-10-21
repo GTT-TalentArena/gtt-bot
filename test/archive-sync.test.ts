@@ -60,6 +60,23 @@ test("Storage usa el endpoint autenticado para leer y el secreto no aparece en l
   assert.match(calls[1]!.url, /\/storage\/v1\/object\/discord-archives\/snapshots\/1-test\/manifest\.json$/)
 })
 
+test("Storage trata el 400 con NoSuchKey como objeto inexistente y el resto de 400 como error", async () => {
+  const env: Env = {
+    DISCORD_PUBLIC_KEY: "", DISCORD_APPLICATION_ID: "app", DISCORD_BOT_TOKEN: "token",
+    SUPABASE_URL: "https://project.supabase.co", SUPABASE_SECRET_KEY: "sb_secret_test",
+  }
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: string | URL | Request) => String(input).includes("missing.json")
+    ? new Response("{\"statusCode\":\"404\",\"error\":\"not_found\",\"message\":\"Object not found\",\"code\":\"NoSuchKey\"}", { status: 400 })
+    : new Response("{\"statusCode\":\"400\",\"error\":\"InvalidRequest\"}", { status: 400 })) as typeof fetch
+  try {
+    assert.equal(await getPrivateText(env, "missing.json"), undefined)
+    await assert.rejects(getPrivateText(env, "bad.json"), /400/)
+  } finally {
+    globalThis.fetch = original
+  }
+})
+
 test("la primera sincronización sustituye un único objeto privado, sin snapshots", async () => {
   const env: Env = {
     DISCORD_PUBLIC_KEY: "", DISCORD_APPLICATION_ID: "app", DISCORD_BOT_TOKEN: "token",
