@@ -1,0 +1,5 @@
+node_modules/
+.wrangler/
+# Credenciales locales: nunca a git
+.dev.vars
+.env

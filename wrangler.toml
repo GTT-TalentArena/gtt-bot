@@ -1,0 +1,13 @@
+name = "gtt-bot"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# Resumen diario en #general. Cron en UTC: 07:00 UTC = 08:00 en Barcelona (horario de invierno)
+[triggers]
+crons = ["0 7 * * *"]
+
+[observability]
+enabled = true
+
+# Secrets (no van aquí): npx wrangler secret put DISCORD_PUBLIC_KEY / DISCORD_APPLICATION_ID / DISCORD_BOT_TOKEN
+# Opcional: GITHUB_TOKEN (token de solo lectura) si la API de GitHub da 403 por límite
