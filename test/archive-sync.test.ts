@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { fetchMessagesSince, type ArchiveOptions, type DiscordMessage } from "../src/archive.ts"
+import { fetchMessagesSince, humanMessagesLookStripped, type ArchiveOptions, type DiscordMessage } from "../src/archive.ts"
 import { syncDiscordArchive } from "../src/archivo.ts"
 import { getPrivateText, putPrivateObject } from "../src/supabase.ts"
 import type { Env } from "../src/discord.ts"
@@ -107,4 +107,18 @@ test("la primera sincronización sustituye un único objeto privado, sin snapsho
   assert.match(uploads[0]!.url, /\/storage\/v1\/object\/discord-archives\/latest-archive\.json$/)
   assert.equal(uploads[0]!.init?.headers instanceof Headers && uploads[0]!.init.headers.get("x-upsert"), "true")
   assert.match(uploads[1]!.url, /\/storage\/v1\/object\/discord-archives\/archive-health\.json$/)
+})
+
+test("el resumen diario del bot (solo embed) no se toma por el intent Message Content desactivado", () => {
+  const summary: DiscordMessage = { ...message("100000000000000301"), content: "", author: { username: "GTT", bot: true }, embeds: [{ title: "Resumen GTT" }] }
+  assert.equal(humanMessagesLookStripped([summary]).stripped, false)
+  // Una persona que solo sube una imagen tampoco es una señal de contenido borrado.
+  const image: DiscordMessage = { ...message("100000000000000302"), content: "", attachments: [{ filename: "captura.png" }] }
+  assert.equal(humanMessagesLookStripped([summary, image]).stripped, false)
+})
+
+test("mensajes de personas vacíos del todo sí delatan el intent Message Content desactivado", () => {
+  const stripped: DiscordMessage = { ...message("100000000000000303"), content: "" }
+  assert.deepEqual(humanMessagesLookStripped([stripped, { ...stripped, id: "100000000000000304" }]), { stripped: true, human: 2 })
+  assert.equal(humanMessagesLookStripped([stripped, message("100000000000000305")]).stripped, false)
 })

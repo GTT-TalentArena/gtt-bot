@@ -1,4 +1,4 @@
-import { archiveManifest, collectArchiveWithStatus, discoverArchiveChannels, fetchAllMessages, fetchMessagesSince, renderSingleArchive, type ArchiveCollection, type ArchiveOmission, type ArchivedChannel, type DiscordMessage } from "./archive.ts"
+import { archiveManifest, collectArchiveWithStatus, discoverArchiveChannels, fetchAllMessages, fetchMessagesSince, humanMessagesLookStripped, renderSingleArchive, type ArchiveCollection, type ArchiveOmission, type ArchivedChannel, type DiscordMessage } from "./archive.ts"
 import { ARCHIVE_ROLE_ID, GUILD_ID } from "./config.ts"
 import type { Env, Interaction } from "./discord.ts"
 import { getPrivateText, putPrivateObject } from "./supabase.ts"
@@ -144,9 +144,9 @@ async function updateFromPrevious(env: Env, previous: StoredArchive): Promise<{ 
   // La copia previa puede contener texto y esconder que el intent Message
   // Content se ha desactivado. Si todos los mensajes normales nuevos llegan
   // vacíos, no sustituimos el último archivo bueno por uno potencialmente roto.
-  const normal = fetched.filter((message) => (message.type ?? 0) === 0 && Boolean(message.author?.username ?? message.author?.global_name))
-  if (normal.length && normal.every((message) => !message.content?.trim())) {
-    discovered.omissions.push({ target: "servidor", operation: "messages", reason: `Los ${normal.length} mensajes normales nuevos no contienen texto; activa el privileged intent Message Content en Developer Portal → Bot y vuelve a sincronizar.` })
+  const content = humanMessagesLookStripped(fetched)
+  if (content.stripped) {
+    discovered.omissions.push({ target: "servidor", operation: "messages", reason: `Los ${content.human} mensajes nuevos de personas llegan vacíos (sin texto, adjuntos ni embeds); activa el privileged intent Message Content en Developer Portal → Bot y vuelve a sincronizar.` })
   }
   return { collection: { archive, omissions: discovered.omissions }, added }
 }
@@ -160,7 +160,9 @@ async function saveLatestArchive(env: Env, collection: ArchiveCollection): Promi
 }
 
 function incompleteArchiveError(omissions: ArchiveOmission[]): Error {
-  return new Error(`La sincronización detectó ${omissions.length} omisión(es); no se publica ni sustituye la última copia completa.`)
+  // Qué y por qué (canal y motivo, nunca el contenido de mensajes), para diagnosticar desde el log.
+  const detail = omissions.map((o) => `${o.target} [${o.operation}]: ${o.reason}`).join(" · ").slice(0, 1500)
+  return new Error(`La sincronización detectó ${omissions.length} omisión(es); no se publica ni sustituye la última copia completa. ${detail}`)
 }
 
 function failureSummary(error: unknown): string {

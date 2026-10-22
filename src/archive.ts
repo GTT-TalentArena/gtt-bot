@@ -16,6 +16,7 @@ export interface DiscordMessage {
   author?: { username?: string; global_name?: string; bot?: boolean }
   attachments?: { filename?: string; url?: string; content_type?: string; size?: number }[]
   embeds?: { title?: string; description?: string; url?: string; provider?: { name?: string }; author?: { name?: string } }[]
+  sticker_items?: { name?: string }[]
 }
 export interface ArchiveOptions { token: string; guildId: string; fetch?: typeof fetch; warn?: (message: string) => void }
 export interface ArchiveOmission {
@@ -26,6 +27,20 @@ export interface ArchiveOmission {
 export interface ArchivedChannel { channel: DiscordChannel; messages: DiscordMessage[] }
 export interface ArchiveCollection { archive: ArchivedChannel[]; omissions: ArchiveOmission[] }
 export interface ArchiveDiscovery { channels: DiscordChannel[]; omissions: ArchiveOmission[] }
+
+/**
+ * Sin el privileged intent Message Content, Discord entrega vacíos el texto, los adjuntos y
+ * los embeds de los mensajes de personas. Los del propio bot (p. ej. el resumen diario, que
+ * es solo un embed) llegan siempre completos y no cuentan, ni tampoco un mensaje de una
+ * persona que solo lleve una imagen, un embed o un sticker.
+ */
+export function humanMessagesLookStripped(messages: DiscordMessage[]): { stripped: boolean; human: number } {
+  const human = messages.filter((message) => (message.type ?? 0) === 0 && !message.author?.bot
+    && Boolean(message.author?.username ?? message.author?.global_name))
+  const empty = (message: DiscordMessage) => !message.content?.trim() && !message.attachments?.length
+    && !message.embeds?.length && !message.sticker_items?.length
+  return { stripped: human.length > 0 && human.every(empty), human: human.length }
+}
 
 export function isDiscordSnowflake(value: string | undefined | null): value is string {
   if (!value || !SNOWFLAKE.test(value)) return false
@@ -161,8 +176,8 @@ export async function collectArchiveWithStatus(options: ArchiveOptions): Promise
   const archive = (await mapWithConcurrency(channels, async (channel): Promise<ArchivedChannel | undefined> => {
     try { return { channel, messages: await fetchAllMessages(options, channel.id) } } catch (error) { recordOmission(options, omissions, channelOmission(channel, "messages", errorMessage(error))); return undefined }
   })).filter((item): item is ArchivedChannel => item !== undefined)
-  const normal = archive.flatMap(({ messages }) => messages).filter((message) => (message.type ?? 0) === 0 && Boolean(message.author?.username ?? message.author?.global_name))
-  if (normal.length && normal.every((message) => !message.content?.trim())) recordOmission(options, omissions, { target: "servidor", operation: "messages", reason: `Los ${normal.length} mensajes normales exportados no contienen texto; activa el privileged intent Message Content en Developer Portal → Bot y vuelve a exportar.` })
+  const content = humanMessagesLookStripped(archive.flatMap(({ messages }) => messages))
+  if (content.stripped) recordOmission(options, omissions, { target: "servidor", operation: "messages", reason: `Los ${content.human} mensajes de personas exportados llegan vacíos (sin texto, adjuntos ni embeds); activa el privileged intent Message Content en Developer Portal → Bot y vuelve a exportar.` })
   return { archive, omissions }
 }
 export async function collectArchive(options: ArchiveOptions): Promise<ArchivedChannel[]> { return (await collectArchiveWithStatus(options)).archive }
